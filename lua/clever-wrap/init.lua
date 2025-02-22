@@ -48,7 +48,7 @@ end
 local function next_pos(row, col, nodes)
     for i, range in ipairs(nodes) do
         local start_row, start_col, end_row, end_col = unpack(range)
-        if (start_row == row and end_col > col) or (row > start_row) then
+        if (start_row == row and end_col > col) or (end_row > row) then
             return { i == 1, start_row, start_col, end_row, end_col }
         end
     end
@@ -68,8 +68,6 @@ local function deduplicate(tbl)
 end
 
 function M.wrap()
-    local origin = vim.o.eventignore
-    vim.o.eventignore = "CursorMoved"
     vim.api.nvim_create_autocmd("CursorMoved", {
         group = vim.api.nvim_create_augroup("clever_wrap", {}),
         once = true,
@@ -112,25 +110,24 @@ function M.wrap()
         if pos == nil then
             return
         end
-        M.execute(origin, pos)
+        M.execute(pos)
     else
         local pos = next_pos(row, col, state[head])
         if pos == nil then
             return
         end
-        M.execute(origin, pos)
+        M.execute(pos)
     end
 end
 
-function M.execute(origin, pos)
+function M.execute(pos)
     vim.cmd([[norm! m']])
     local pre_row, prev_col = get_cursor()
     local first, start_row, start_col, end_row, end_col = unpack(pos)
     local x = string.format(
-        [[%s<cmd>lua %s <CR>"zp<cmd>lua vim.o.eventignore = "%s"<CR>]],
+        [[%s<cmd>lua %s <CR>"zp]],
         first and '"fP' or '"_x',
-        string.format("vim.api.nvim_win_set_cursor(0, { %d, %d })", start_row + 1, end_col),
-        origin
+        string.format("vim.api.nvim_win_set_cursor(0, { %d, %d })", end_row + 1, end_col)
     )
     FeedKeys(x, "nx")
     local row, col = get_cursor()
@@ -140,21 +137,25 @@ end
 function M.get_nodes(row, col)
     local node_ranges = {}
 
-    local ts_utils = require("nvim-treesitter.ts_utils")
-    -- Get initial node at cursor
-    local cursor_node = ts_utils.get_node_at_cursor()
+    local ok = pcall(function()
+        vim.treesitter.get_parser(0, vim.bo.filetype):parse(true)
+    end)
+    if not ok then
+        return {}
+    end
+    local cursor_node = vim.treesitter.get_node()
     if not cursor_node then
         return {}
     end
 
     -- Traverse parents to collect increasing end positions
-    local parent = cursor_node
-    while parent do
-        local start_row, start_col, end_row, end_col = parent:range()
+    local node = cursor_node
+    while node do
+        local start_row, start_col, end_row, end_col = node:range()
         if start_row == row and start_col == col then
             table.insert(node_ranges, { start_row, start_col, end_row, end_col })
         end
-        parent = parent:parent()
+        node = node:parent()
     end
 
     return node_ranges
