@@ -81,9 +81,8 @@ local function reverse(tbl)
     return res
 end
 
-local cursorManager = require("multicursor-nvim.cursor-manager")
-
 function M.mc()
+    local cursorManager = require("multicursor-nvim.cursor-manager")
     local feedkeysManager = require("multicursor-nvim.feedkeys-manager")
     cursorManager:action(function(ctx)
         local mainCursor = ctx:mainCursor()
@@ -95,19 +94,7 @@ function M.mc()
     end, { excludeMainCursor = true, fixWindow = false })
 end
 
-function M.wrap(direction)
-    -- vim.schedule(function()
-    --     vim.api.nvim_create_autocmd("TextChanged", {
-    --         group = vim.api.nvim_create_augroup("clever", {}),
-    --         once = true,
-    --         callback = function()
-    --             state = {}
-    --             link = {}
-    --         end,
-    --     })
-    -- end)
-    -- local origin = vim.o.eventignore
-    -- vim.o.eventignore = "TextChanged"
+function M.jump(direction)
     local origin = ""
     local row, col = get_cursor()
     if vim.fn.mode() == "i" then
