@@ -7,9 +7,9 @@ local link = {}
 local pair = { ["{"] = "}", ['"'] = '"', ["("] = ")", ["["] = "]" }
 local cache_z_reg
 local cache_f_reg
+local pos
 
-local function surrounding_char()
-    local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+local function surrounding_char(row, col)
     local x = vim.api.nvim_buf_get_text(0, row - 1, col, row - 1, col + 2, {})[1]
     return x:sub(1, 1), x:sub(2, 2)
 end
@@ -76,14 +76,17 @@ function M.wrap()
         end,
     })
 
+    local insert = false
+    local row, col = get_cursor()
     if vim.fn.mode() == "i" then
+        insert = true
         vim.cmd("stopinsert")
+        col = col - 1
     end
 
-    local row, col = get_cursor()
     local head = link_start(cursor_id(row, col))
+    local left, right = surrounding_char(row + 1, col)
     if head == nil or state[head] == nil then
-        local left, right = surrounding_char()
         local expected = pair[left]
         if expected == nil then
             vim.notify("[clever_wrap] Your cursor is not in a pair", vim.log.levels.WARN)
@@ -91,9 +94,9 @@ function M.wrap()
         end
         if expected ~= right then
             vim.fn.setreg("z", pair[left], "v")
-            FeedKeys('"_x', "nix")
+            vim.api.nvim_buf_set_text(0, row, col, row, col + 1, { "" })
         else
-            FeedKeys('"_x"_x', "nix")
+            vim.api.nvim_buf_set_text(0, row, col, row, col + 2, { "" })
         end
 
         local nodes = deduplicate(M.get_nodes(row, col))
@@ -104,36 +107,37 @@ function M.wrap()
         end
 
         prepare_regs(expected, left)
-        local pos = next_pos(row, col, nodes)
+        pos = next_pos(row, col, nodes)
         if pos == nil then
             return
         end
 
-        M.execute(pos)
+        M.execute()
     else
-        local cursor_char = surrounding_char()
+        local cursor_char = surrounding_char(row, col)
         cache_z_reg = vim.fn.getreginfo("z")
         vim.fn.setreg("z", cursor_char, "v")
 
-        local pos = next_pos(row, col, state[head])
+        pos = next_pos(row, col, state[head])
         if pos == nil then
             return
         end
 
-        M.execute(pos)
+        M.execute()
     end
 end
 
-function M.execute(pos)
+function M.execute()
     vim.cmd([[norm! m']])
     local pre_row, prev_col = get_cursor()
     local first, start_row, start_col, end_row, end_col = unpack(pos)
-    local command = string.format(
-        [[%s<cmd>lua %s <CR>"zp]],
-        first and '"fP' or '"_x',
-        string.format("vim.api.nvim_win_set_cursor(0, { %d, %d })", end_row + 1, end_col)
-    )
-    FeedKeys(command, "nx")
+    if first then
+        vim.api.nvim_put({ "(" }, "c", false, true)
+    else
+        vim.api.nvim_buf_set_text(0, pre_row, prev_col, pre_row, prev_col + 1, { "" })
+    end
+    vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col })
+    vim.api.nvim_put({ ")" }, "c", true, false)
     local row, col = get_cursor()
     link[cursor_id(row, col)] = string.format("%d!!%d", pre_row, prev_col)
     vim.fn.setreg("z", cache_z_reg)
