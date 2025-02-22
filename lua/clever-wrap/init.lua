@@ -2,6 +2,7 @@ local M = {}
 M.config = {}
 
 local state = {}
+local link = {}
 
 local pair = {
     ["{"] = "}",
@@ -23,11 +24,29 @@ local function surrounding_char()
     return x:sub(1, 1), x:sub(2, 2)
 end
 
-local function next_pos()
+local function get_cursor()
     local cursor_pos = vim.fn.getpos(".")
     local row = cursor_pos[2] - 1
     local col = cursor_pos[3] - 1
-    for i, range in ipairs(state) do
+    return row, col
+end
+
+local function link_start(id)
+    if link[id] == nil then
+        return nil
+    end
+    while link[id] ~= nil do
+        id = link[id]
+    end
+    return id
+end
+
+local cursor_id = function(row, col)
+    return string.format("%d!!%d", row, col)
+end
+
+local function next_pos(row, col, nodes)
+    for i, range in ipairs(nodes) do
         local start_row, start_col, end_row, end_col = unpack(range)
         if (start_row == row and end_col > col) or (row > start_row) then
             return { i == 1, start_row, start_col, end_row, end_col }
@@ -55,7 +74,8 @@ function M.wrap()
         group = vim.api.nvim_create_augroup("clever_wrap", {}),
         once = true,
         callback = function()
-            state = {}
+            -- state = {}
+            -- link = {}
         end,
     })
 
@@ -63,48 +83,58 @@ function M.wrap()
         vim.cmd("stopinsert")
     end
 
-    if #state == 0 then
+    local row, col = get_cursor()
+    local head = link_start(cursor_id(row, col))
+    if head == nil or state[head] == nil then
         local cur, next = surrounding_char()
-        local what = pair[cur] or ")"
+        local what = pair[cur]
+        if what == nil then
+            vim.notify("[clever_wrap] Your cursor is not in a pair", vim.log.levels.WARN)
+            return
+        end
         if what ~= next then
             vim.fn.setreg("z", pair[cur], "v")
             FeedKeys('"_x', "nix")
         else
             FeedKeys('"_x"_x', "nix")
         end
-        M.execute(origin)
+        local cache_z_reg = vim.fn.getreginfo("z")
+        vim.fn.setreg("z", ")", "v")
+        vim.fn.setreg("f", "(", "v")
+        local nodes = deduplicate(M.get_nodes(row, col))
+        if head == nil then
+            state[cursor_id(row, col)] = nodes
+        else
+            state[head] = nodes
+        end
+        -- vim.fn.setreg("z", cache_z_reg)
+        local pos = next_pos(row, col, nodes)
+        if pos == nil then
+            return
+        end
+        M.execute(origin, pos)
     else
-        M.execute(origin)
+        local pos = next_pos(row, col, state[head])
+        if pos == nil then
+            return
+        end
+        M.execute(origin, pos)
     end
 end
 
-function M.execute(origin)
-    local cache_z_reg = vim.fn.getreginfo("z")
-    vim.fn.setreg("z", ")", "v")
-    vim.fn.setreg("f", "(", "v")
-    -- vim.fn.setreg("z", cache_z_reg)
-    if #state == 0 then
-        local cursor_pos = vim.fn.getpos(".")
-        local row = cursor_pos[2] - 1
-        local col = cursor_pos[3] - 1
-        local ranges = deduplicate(M.get_nodes(row, col))
-        state = ranges
-    end
-    local pos = next_pos()
-    if pos == nil then
-        return
-    end
+function M.execute(origin, pos)
     vim.cmd([[norm! m']])
+    local pre_row, prev_col = get_cursor()
     local first, start_row, start_col, end_row, end_col = unpack(pos)
-    FeedKeys(
-        string.format(
-            [[%s<cmd>lua %s <CR>"zp<cmd>lua vim.o.eventignore = "%s"<CR>]],
-            first and '"fP' or '"_x',
-            string.format("vim.api.nvim_win_set_cursor(0, { %d, %d })", start_row + 1, end_col),
-            origin
-        ),
-        "n"
+    local x = string.format(
+        [[%s<cmd>lua %s <CR>"zp<cmd>lua vim.o.eventignore = "%s"<CR>]],
+        first and '"fP' or '"_x',
+        string.format("vim.api.nvim_win_set_cursor(0, { %d, %d })", start_row + 1, end_col),
+        origin
     )
+    FeedKeys(x, "nx")
+    local row, col = get_cursor()
+    link[string.format("%d!!%d", row, col)] = string.format("%d!!%d", pre_row, prev_col)
 end
 
 function M.get_nodes(row, col)
@@ -121,24 +151,12 @@ function M.get_nodes(row, col)
     local parent = cursor_node
     while parent do
         local start_row, start_col, end_row, end_col = parent:range()
-        -- __AUTO_GENERATED_PRINT_VAR_START__
-        print(
-            [==[M.get_nodes#while {start_row, start_col, end_row, end_col}:]==],
-            vim.inspect({ start_row, start_col, end_row, end_col })
-        ) -- __AUTO_GENERATED_PRINT_VAR_END__
         if start_row == row and start_col == col then
-            if end_row == start_row then
-                table.insert(node_ranges, { start_row, start_col, end_row, end_col })
-            else
-                table.insert(node_ranges, { start_row, start_col, end_row, end_col })
-            end
+            table.insert(node_ranges, { start_row, start_col, end_row, end_col })
         end
         parent = parent:parent()
     end
 
-    for _, node in ipairs(node_ranges) do
-        print(vim.inspect(node))
-    end
     return node_ranges
 end
 
