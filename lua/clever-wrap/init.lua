@@ -1,22 +1,12 @@
 local M = {}
+
 M.config = {}
 
 local state = {}
 local link = {}
-
-local pair = {
-    ["{"] = "}",
-    ['"'] = '"',
-    ["("] = ")",
-    ["["] = "]",
-}
-
-vim.keymap.set("n", "<d-o>", function()
-    state = {}
-end)
-vim.keymap.set("n", "<d-u>", function()
-    M.execute()
-end)
+local pair = { ["{"] = "}", ['"'] = '"', ["("] = ")", ["["] = "]" }
+local cache_z_reg
+local cache_f_reg
 
 local function surrounding_char()
     local row, col = unpack(vim.api.nvim_win_get_cursor(0))
@@ -35,7 +25,9 @@ local function link_start(id)
     if link[id] == nil then
         return nil
     end
-    while link[id] ~= nil do
+    local try = 0
+    while link[id] ~= nil and try < 30 do
+        try = try + 1
         id = link[id]
     end
     return id
@@ -67,6 +59,13 @@ local function deduplicate(tbl)
     return result
 end
 
+local function prepare_regs(left, right)
+    cache_z_reg = vim.fn.getreginfo("z")
+    cache_f_reg = vim.fn.getreginfo("f")
+    vim.fn.setreg("z", left, "v")
+    vim.fn.setreg("f", right, "v")
+end
+
 function M.wrap()
     vim.api.nvim_create_autocmd("CursorMoved", {
         group = vim.api.nvim_create_augroup("clever_wrap", {}),
@@ -84,38 +83,43 @@ function M.wrap()
     local row, col = get_cursor()
     local head = link_start(cursor_id(row, col))
     if head == nil or state[head] == nil then
-        local cur, next = surrounding_char()
-        local what = pair[cur]
-        if what == nil then
+        local left, right = surrounding_char()
+        local expected = pair[left]
+        if expected == nil then
             vim.notify("[clever_wrap] Your cursor is not in a pair", vim.log.levels.WARN)
             return
         end
-        if what ~= next then
-            vim.fn.setreg("z", pair[cur], "v")
+        if expected ~= right then
+            vim.fn.setreg("z", pair[left], "v")
             FeedKeys('"_x', "nix")
         else
             FeedKeys('"_x"_x', "nix")
         end
-        local cache_z_reg = vim.fn.getreginfo("z")
-        vim.fn.setreg("z", ")", "v")
-        vim.fn.setreg("f", "(", "v")
+
         local nodes = deduplicate(M.get_nodes(row, col))
         if head == nil then
             state[cursor_id(row, col)] = nodes
         else
             state[head] = nodes
         end
-        -- vim.fn.setreg("z", cache_z_reg)
+
+        prepare_regs(expected, left)
         local pos = next_pos(row, col, nodes)
         if pos == nil then
             return
         end
+
         M.execute(pos)
     else
+        local cursor_char = surrounding_char()
+        cache_z_reg = vim.fn.getreginfo("z")
+        vim.fn.setreg("z", cursor_char, "v")
+
         local pos = next_pos(row, col, state[head])
         if pos == nil then
             return
         end
+
         M.execute(pos)
     end
 end
@@ -124,14 +128,16 @@ function M.execute(pos)
     vim.cmd([[norm! m']])
     local pre_row, prev_col = get_cursor()
     local first, start_row, start_col, end_row, end_col = unpack(pos)
-    local x = string.format(
+    local command = string.format(
         [[%s<cmd>lua %s <CR>"zp]],
         first and '"fP' or '"_x',
         string.format("vim.api.nvim_win_set_cursor(0, { %d, %d })", end_row + 1, end_col)
     )
-    FeedKeys(x, "nx")
+    FeedKeys(command, "nx")
     local row, col = get_cursor()
-    link[string.format("%d!!%d", row, col)] = string.format("%d!!%d", pre_row, prev_col)
+    link[cursor_id(row, col)] = string.format("%d!!%d", pre_row, prev_col)
+    vim.fn.setreg("z", cache_z_reg)
+    vim.fn.setreg("f", cache_f_reg)
 end
 
 function M.get_nodes(row, col)
@@ -150,6 +156,7 @@ function M.get_nodes(row, col)
 
     -- Traverse parents to collect increasing end positions
     local node = cursor_node
+    row, col = cursor_node:range()
     while node do
         local start_row, start_col, end_row, end_col = node:range()
         if start_row == row and start_col == col then
