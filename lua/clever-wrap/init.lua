@@ -14,7 +14,7 @@ vim.keymap.set("n", "<d-o>", function()
     state = {}
 end)
 vim.keymap.set("n", "<d-u>", function()
-    M.fuck()
+    M.execute()
 end)
 
 local function surrounding_char()
@@ -72,17 +72,16 @@ function M.wrap()
         else
             FeedKeys('"_x"_x', "nix")
         end
-        -- vim.schedule(function()
-        M.fuck(origin)
-        -- end)
+        M.execute(origin)
     else
-        M.fuck(origin)
+        M.execute(origin)
     end
 end
 
-function M.fuck(origin)
+function M.execute(origin)
     local cache_z_reg = vim.fn.getreginfo("z")
     vim.fn.setreg("z", ")", "v")
+    vim.fn.setreg("f", "(", "v")
     -- vim.fn.setreg("z", cache_z_reg)
     if #state == 0 then
         local cursor_pos = vim.fn.getpos(".")
@@ -100,8 +99,8 @@ function M.fuck(origin)
     FeedKeys(
         string.format(
             [[%s<cmd>lua %s <CR>"zp<cmd>lua vim.o.eventignore = "%s"<CR>]],
-            first and 'h"_x' or '"_x',
-            string.format("vim.api.nvim_win_set_cursor(0, { %d, %d })", start_row + 1, end_col - 1),
+            first and '"fP' or '"_x',
+            string.format("vim.api.nvim_win_set_cursor(0, { %d, %d })", start_row + 1, end_col),
             origin
         ),
         "n"
@@ -122,9 +121,14 @@ function M.get_nodes(row, col)
     local parent = cursor_node
     while parent do
         local start_row, start_col, end_row, end_col = parent:range()
+        -- __AUTO_GENERATED_PRINT_VAR_START__
+        print(
+            [==[M.get_nodes#while {start_row, start_col, end_row, end_col}:]==],
+            vim.inspect({ start_row, start_col, end_row, end_col })
+        ) -- __AUTO_GENERATED_PRINT_VAR_END__
         if start_row == row and start_col == col then
             if end_row == start_row then
-                table.insert(node_ranges, { start_row, start_col, end_row, end_col - 1 })
+                table.insert(node_ranges, { start_row, start_col, end_row, end_col })
             else
                 table.insert(node_ranges, { start_row, start_col, end_row, end_col })
             end
