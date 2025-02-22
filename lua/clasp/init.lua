@@ -108,7 +108,6 @@ function M.jump(direction)
         local expected = pair[left]
         if expected == nil then
             vim.notify("[clever_wrap] Your cursor is not in a pair", vim.log.levels.WARN)
-            vim.o.eventignore = origin
             return
         end
         if expected ~= right then
@@ -127,7 +126,6 @@ function M.jump(direction)
         left_p, right_p = left, expected
         pos = next_pos(row, col, nodes)
         if pos == nil then
-            vim.o.eventignore = origin
             return
         end
 
@@ -137,13 +135,11 @@ function M.jump(direction)
         right_p = cursor_char
         pos = next_pos(row, col, state[head])
         if pos == nil then
-            vim.o.eventignore = origin
             return
         end
 
         M.execute()
     end
-    vim.o.eventignore = origin
 end
 
 function M.execute()
@@ -189,6 +185,11 @@ function M.get_nodes(row, col)
             table.insert(node_ranges, { start_row, start_col, end_row, end_col })
         end
         node = node:parent()
+    end
+
+    -- At least include line ending
+    if #node_ranges == 0 then
+        table.insert(node_ranges, { row, col, row, #vim.api.nvim_get_current_line() })
     end
 
     return node_ranges
