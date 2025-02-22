@@ -8,6 +8,11 @@ local pair = { ["{"] = "}", ['"'] = '"', ["("] = ")", ["["] = "]" }
 local left_p, right_p
 local pos
 
+M.clean = function()
+    state = {}
+    link = {}
+end
+
 local function surrounding_char(row, col)
     local x = vim.api.nvim_buf_get_text(0, row - 1, col, row - 1, col + 2, {})[1]
     return x:sub(1, 1), x:sub(2, 2)
@@ -39,7 +44,17 @@ end
 local function next_pos(row, col, nodes)
     for i, range in ipairs(nodes) do
         local start_row, start_col, end_row, end_col = unpack(range)
-        if (start_row == row and end_col > col) or (end_row > row) then
+        if (start_row == row and end_col > col - 1) or (end_row > row) then
+            return { i == 1, start_row, start_col, end_row, end_col }
+        end
+    end
+    return nil
+end
+
+local function prev_pos(row, col, nodes)
+    for i, range in ipairs(nodes) do
+        local start_row, start_col, end_row, end_col = unpack(range)
+        if (start_row == row and end_col < col - 1) or (end_row < row) then
             return { i == 1, start_row, start_col, end_row, end_col }
         end
     end
@@ -58,6 +73,14 @@ local function deduplicate(tbl)
     return result
 end
 
+local function reverse(tbl)
+    local res = {}
+    for i = #tbl, 1, -1 do
+        res[#tbl - i + 1] = tbl[i]
+    end
+    return res
+end
+
 local cursorManager = require("multicursor-nvim.cursor-manager")
 
 function M.mc()
@@ -72,11 +95,22 @@ function M.mc()
     end, { excludeMainCursor = true, fixWindow = false })
 end
 
-function M.wrap()
-    local insert = false
+function M.wrap(direction)
+    -- vim.schedule(function()
+    --     vim.api.nvim_create_autocmd("TextChanged", {
+    --         group = vim.api.nvim_create_augroup("clever", {}),
+    --         once = true,
+    --         callback = function()
+    --             state = {}
+    --             link = {}
+    --         end,
+    --     })
+    -- end)
+    -- local origin = vim.o.eventignore
+    -- vim.o.eventignore = "TextChanged"
+    local origin = ""
     local row, col = get_cursor()
     if vim.fn.mode() == "i" then
-        insert = true
         vim.cmd("stopinsert")
         col = col - 1
     end
@@ -87,6 +121,7 @@ function M.wrap()
         local expected = pair[left]
         if expected == nil then
             vim.notify("[clever_wrap] Your cursor is not in a pair", vim.log.levels.WARN)
+            vim.o.eventignore = origin
             return
         end
         if expected ~= right then
@@ -105,6 +140,7 @@ function M.wrap()
         left_p, right_p = left, expected
         pos = next_pos(row, col, nodes)
         if pos == nil then
+            vim.o.eventignore = origin
             return
         end
 
@@ -112,14 +148,15 @@ function M.wrap()
     else
         local cursor_char = surrounding_char(row + 1, col)
         right_p = cursor_char
-
         pos = next_pos(row, col, state[head])
         if pos == nil then
+            vim.o.eventignore = origin
             return
         end
 
         M.execute()
     end
+    vim.o.eventignore = origin
 end
 
 function M.execute()
@@ -134,7 +171,9 @@ function M.execute()
     vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col })
     vim.api.nvim_put({ right_p }, "c", true, false)
     local row, col = get_cursor()
-    link[cursor_id(row, col)] = string.format("%d!!%d", pre_row, prev_col)
+    if link[cursor_id(row, col)] == nil then
+        link[cursor_id(row, col)] = string.format("%d!!%d", pre_row, prev_col)
+    end
     if vim.fn.mode() == "i" then
         vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col + 2 })
     end
