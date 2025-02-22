@@ -66,16 +66,21 @@ local function prepare_regs(left, right)
     vim.fn.setreg("f", right, "v")
 end
 
-function M.wrap()
-    vim.api.nvim_create_autocmd("CursorMoved", {
-        group = vim.api.nvim_create_augroup("clever_wrap", {}),
-        once = true,
-        callback = function()
-            -- state = {}
-            -- link = {}
-        end,
-    })
+local cursorManager = require("multicursor-nvim.cursor-manager")
 
+function M.mc()
+    local feedkeysManager = require("multicursor-nvim.feedkeys-manager")
+    cursorManager:action(function(ctx)
+        local mainCursor = ctx:mainCursor()
+        ctx:forEachCursor(function(cursor)
+            cursor:perform(function()
+                feedkeysManager.nvim_feedkeys("<c-e>", "m", false)
+            end)
+        end)
+    end, { excludeMainCursor = true, fixWindow = false })
+end
+
+function M.wrap()
     local insert = false
     local row, col = get_cursor()
     if vim.fn.mode() == "i" then
@@ -142,6 +147,9 @@ function M.execute()
     link[cursor_id(row, col)] = string.format("%d!!%d", pre_row, prev_col)
     vim.fn.setreg("z", cache_z_reg)
     vim.fn.setreg("f", cache_f_reg)
+    if vim.fn.mode() == "i" then
+        vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col + 2 })
+    end
 end
 
 function M.get_nodes(row, col)
