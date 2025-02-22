@@ -5,8 +5,7 @@ M.config = {}
 local state = {}
 local link = {}
 local pair = { ["{"] = "}", ['"'] = '"', ["("] = ")", ["["] = "]" }
-local cache_z_reg
-local cache_f_reg
+local left_p, right_p
 local pos
 
 local function surrounding_char(row, col)
@@ -59,13 +58,6 @@ local function deduplicate(tbl)
     return result
 end
 
-local function prepare_regs(left, right)
-    cache_z_reg = vim.fn.getreginfo("z")
-    cache_f_reg = vim.fn.getreginfo("f")
-    vim.fn.setreg("z", left, "v")
-    vim.fn.setreg("f", right, "v")
-end
-
 local cursorManager = require("multicursor-nvim.cursor-manager")
 
 function M.mc()
@@ -98,7 +90,6 @@ function M.wrap()
             return
         end
         if expected ~= right then
-            vim.fn.setreg("z", pair[left], "v")
             vim.api.nvim_buf_set_text(0, row, col, row, col + 1, { "" })
         else
             vim.api.nvim_buf_set_text(0, row, col, row, col + 2, { "" })
@@ -111,7 +102,7 @@ function M.wrap()
             state[head] = nodes
         end
 
-        prepare_regs(expected, left)
+        left_p, right_p = left, expected
         pos = next_pos(row, col, nodes)
         if pos == nil then
             return
@@ -119,9 +110,8 @@ function M.wrap()
 
         M.execute()
     else
-        local cursor_char = surrounding_char(row, col)
-        cache_z_reg = vim.fn.getreginfo("z")
-        vim.fn.setreg("z", cursor_char, "v")
+        local cursor_char = surrounding_char(row + 1, col)
+        right_p = cursor_char
 
         pos = next_pos(row, col, state[head])
         if pos == nil then
@@ -137,16 +127,14 @@ function M.execute()
     local pre_row, prev_col = get_cursor()
     local first, start_row, start_col, end_row, end_col = unpack(pos)
     if first then
-        vim.api.nvim_put({ "(" }, "c", false, true)
+        vim.api.nvim_put({ left_p }, "c", false, true)
     else
         vim.api.nvim_buf_set_text(0, pre_row, prev_col, pre_row, prev_col + 1, { "" })
     end
     vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col })
-    vim.api.nvim_put({ ")" }, "c", true, false)
+    vim.api.nvim_put({ right_p }, "c", true, false)
     local row, col = get_cursor()
     link[cursor_id(row, col)] = string.format("%d!!%d", pre_row, prev_col)
-    vim.fn.setreg("z", cache_z_reg)
-    vim.fn.setreg("f", cache_f_reg)
     if vim.fn.mode() == "i" then
         vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col + 2 })
     end
@@ -171,7 +159,7 @@ function M.get_nodes(row, col)
     row, col = cursor_node:range()
     while node do
         local start_row, start_col, end_row, end_col = node:range()
-        if start_row == row and start_col == col then
+        if start_row == row then
             table.insert(node_ranges, { start_row, start_col, end_row, end_col })
         end
         node = node:parent()
