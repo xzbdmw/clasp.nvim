@@ -1,7 +1,8 @@
+---@alias Nodes table<integer, integer, integer, integer>
 local M = {}
 
 M.config = {
-    pair = { ["{"] = "}", ['"'] = '"', ["("] = ")", ["["] = "]" },
+    pairs = { ["{"] = "}", ['"'] = '"', ["("] = ")", ["["] = "]" },
 }
 
 local state = {}
@@ -47,23 +48,28 @@ local cursor_id = function(row, col)
     return string.format("%d!!%d", row, col)
 end
 
----@return [boolean, integer, integer]|nil
-local function next_pos(row, col, nodes)
+---@return { first: boolean, end_row: integer, end_col: integer }|nil
+local function prev_pos(row, col, nodes)
     for i, range in ipairs(nodes) do
-        local start_row, start_col, end_row, end_col = unpack(range)
-        if (start_row == row and end_col > col - 1) or (end_row > row) then
-            return { i == 1, end_row, end_col }
+        if (range.start_row == row and range.end_col < col - 1) or (range.end_row < row) then
+            return { first = i == 1, end_row = range.end_row, end_col = range.end_col }
         end
     end
     return nil
 end
 
----@return [boolean, integer, integer]|nil
-local function prev_pos(row, col, nodes)
+---@param row integer
+---@param col integer
+---@param nodes { start_row: integer, start_col: integer, end_row: integer, end_col: integer }
+---@param direction "next"|"prev"
+---@return { first: boolean, end_row: integer, end_col: integer }|nil
+local function next_pos(row, col, nodes, direction)
+    if direction == "prev" then
+        return prev_pos(row, col, nodes)
+    end
     for i, range in ipairs(nodes) do
-        local start_row, start_col, end_row, end_col = unpack(range)
-        if (start_row == row and end_col < col - 1) or (end_row < row) then
-            return { i == 1, end_row, end_col }
+        if (range.start_row == row and range.end_col > col - 1) or (range.end_row > row) then
+            return { first = i == 1, end_row = range.end_row, end_col = range.end_col }
         end
     end
     return nil
@@ -91,6 +97,8 @@ local function reverse(tbl)
     return res
 end
 
+---@param row integer
+---@param col integer
 local function clean_state(row, col)
     if not (package.loaded["multicursor-nvim"] and require("multicursor-nvim").numCursors() > 1) then
         M.clean()
@@ -109,6 +117,7 @@ local function clean_state(row, col)
     end
 end
 
+---@param direction "next"|"prev"
 function M.wrap(direction)
     local origin = ""
     local row, col = get_cursor()
@@ -121,7 +130,7 @@ function M.wrap(direction)
     local left, right = surrounding_char(row + 1, col)
     if head == nil or state[head] == nil then
         clean_state(row, col)
-        local expected = M.config.pair[left]
+        local expected = M.config.pairs[left]
         if expected == nil then
             vim.notify("[clever_wrap] Your cursor is not in a pair", vim.log.levels.WARN)
             return
@@ -135,6 +144,9 @@ function M.wrap(direction)
         end
 
         local nodes = deduplicate(M.get_nodes(row, col))
+        if direction == "prev" then
+            nodes = reverse(nodes)
+        end
         if head == nil then
             state[cursor_id(row, col)] = nodes
         else
@@ -142,7 +154,7 @@ function M.wrap(direction)
         end
 
         local left_pair, right_pair = left, expected
-        local pos = next_pos(row, col, nodes)
+        local pos = next_pos(row, col, nodes, "next")
         if pos == nil then
             return
         end
@@ -150,7 +162,7 @@ function M.wrap(direction)
         M.execute(pos, left, expected)
     else
         local cursor_char = surrounding_char(row + 1, col)
-        local pos = next_pos(row, col, state[head])
+        local pos = next_pos(row, col, state[head], direction)
         if pos == nil then
             return
         end
@@ -160,10 +172,13 @@ function M.wrap(direction)
     end
 end
 
+---@param pos { first: boolean, end_row: integer, end_col: integer }
+---@param left_pair string|nil
+---@param right_pair string
 function M.execute(pos, left_pair, right_pair)
     vim.cmd([[norm! m']])
     local cur_row, cur_col = get_cursor()
-    local first, end_row, end_col = unpack(pos)
+    local first, end_row, end_col = pos.first, pos.end_row, pos.end_col
     if first and left_pair ~= nil then
         -- |text -> (|text
         vim.api.nvim_buf_set_text(0, cur_row, cur_col, cur_row, cur_col, { left_pair })
@@ -184,7 +199,7 @@ function M.execute(pos, left_pair, right_pair)
     end
 end
 
----@return table<integer, integer, integer, integer>
+---@return { start_row: integer, start_col: integer, end_row: integer, end_col: integer }
 function M.get_nodes(row, col)
     local node_ranges = {}
 
@@ -205,7 +220,10 @@ function M.get_nodes(row, col)
     while node do
         local start_row, start_col, end_row, end_col = node:range()
         if start_row == row then
-            table.insert(node_ranges, { start_row, start_col, end_row, end_col })
+            table.insert(
+                node_ranges,
+                { start_row = start_row, start_col = start_col, end_row = end_row, end_col = end_col }
+            )
         end
         ---@diagnostic disable-next-line: cast-local-type
         node = node:parent()
@@ -213,7 +231,10 @@ function M.get_nodes(row, col)
 
     -- At least include line ending
     if #node_ranges == 0 then
-        table.insert(node_ranges, { row, col, row, #vim.api.nvim_get_current_line() })
+        table.insert(
+            node_ranges,
+            { start_row = row, start_col = col, end_row = row, end_col = #vim.api.nvim_get_current_line() }
+        )
     end
 
     return node_ranges
