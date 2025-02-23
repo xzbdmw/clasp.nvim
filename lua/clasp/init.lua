@@ -200,7 +200,11 @@ function M.execute(pos, left_pair, right_pair)
         vim.api.nvim_buf_set_text(0, cur_row, cur_col, cur_row, cur_col + 1, { "" })
     end
     -- text| -> text)|
-    vim.api.nvim_buf_set_text(0, end_row, end_col + 1, end_row, end_col + 1, { right_pair })
+    if end_row == cur_row then
+        vim.api.nvim_buf_set_text(0, end_row, end_col + 1, end_row, end_col + 1, { right_pair })
+    else
+        vim.api.nvim_buf_set_text(0, end_row, end_col, end_row, end_col, { right_pair })
+    end
     -- |text -> text|
     vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col + 1 })
     local row, col = get_cursor()
