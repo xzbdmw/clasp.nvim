@@ -1,22 +1,25 @@
 local M = {}
 
-M.config = {}
+M.config = {
+    pair = { ["{"] = "}", ['"'] = '"', ["("] = ")", ["["] = "]" },
+}
 
 local state = {}
 local link = {}
-local pair = { ["{"] = "}", ['"'] = '"', ["("] = ")", ["["] = "]" }
-local left_pair, right_pair
+local mc_last_create_time = nil
 
 M.clean = function()
     state = {}
     link = {}
 end
 
+---@return string, string
 local function surrounding_char(row, col)
     local x = vim.api.nvim_buf_get_text(0, row - 1, col, row - 1, col + 2, {})[1]
     return x:sub(1, 1), x:sub(2, 2)
 end
 
+---@return integer, integer
 local function get_cursor()
     local cursor_pos = vim.fn.getpos(".")
     local row = cursor_pos[2] - 1
@@ -24,6 +27,8 @@ local function get_cursor()
     return row, col
 end
 
+---@param id string
+---@return string|nil
 local function link_head(id)
     if link[id] == nil then
         return nil
@@ -37,10 +42,12 @@ local function link_head(id)
     return id
 end
 
+---@return string
 local cursor_id = function(row, col)
     return string.format("%d!!%d", row, col)
 end
 
+---@return [boolean, integer, integer]|nil
 local function next_pos(row, col, nodes)
     for i, range in ipairs(nodes) do
         local start_row, start_col, end_row, end_col = unpack(range)
@@ -51,6 +58,7 @@ local function next_pos(row, col, nodes)
     return nil
 end
 
+---@return [boolean, integer, integer]|nil
 local function prev_pos(row, col, nodes)
     for i, range in ipairs(nodes) do
         local start_row, start_col, end_row, end_col = unpack(range)
@@ -61,6 +69,7 @@ local function prev_pos(row, col, nodes)
     return nil
 end
 
+---@return table
 local function deduplicate(tbl)
     local seen = {}
     local result = {}
@@ -73,6 +82,7 @@ local function deduplicate(tbl)
     return result
 end
 
+---@return table
 local function reverse(tbl)
     local res = {}
     for i = #tbl, 1, -1 do
@@ -81,20 +91,25 @@ local function reverse(tbl)
     return res
 end
 
-function M.mc()
-    local cursorManager = require("multicursor-nvim.cursor-manager")
-    local feedkeysManager = require("multicursor-nvim.feedkeys-manager")
-    cursorManager:action(function(ctx)
-        local mainCursor = ctx:mainCursor()
-        ctx:forEachCursor(function(cursor)
-            cursor:perform(function()
-                feedkeysManager.nvim_feedkeys("<c-e>", "m", false)
-            end)
-        end)
-    end, { excludeMainCursor = true, fixWindow = false })
+local function clean_state(row, col)
+    if not (package.loaded["multicursor-nvim"] and require("multicursor-nvim").numCursors() > 1) then
+        M.clean()
+    else
+        if mc_last_create_time == nil then
+            mc_last_create_time = vim.uv.hrtime()
+            return
+        end
+        -- This only fires upon pair state creation, so subsequent call to
+        -- wrap do not invalidate state.
+        local duration = 0.000001 * (vim.loop.hrtime() - mc_last_create_time)
+        if duration > 3000 then
+            mc_last_create_time = vim.uv.hrtime()
+            M.clean()
+        end
+    end
 end
 
-function M.jump(direction)
+function M.wrap(direction)
     local origin = ""
     local row, col = get_cursor()
     if vim.fn.mode() == "i" then
@@ -105,7 +120,8 @@ function M.jump(direction)
     local head = link_head(cursor_id(row, col))
     local left, right = surrounding_char(row + 1, col)
     if head == nil or state[head] == nil then
-        local expected = pair[left]
+        clean_state(row, col)
+        local expected = M.config.pair[left]
         if expected == nil then
             vim.notify("[clever_wrap] Your cursor is not in a pair", vim.log.levels.WARN)
             return
@@ -125,30 +141,30 @@ function M.jump(direction)
             state[head] = nodes
         end
 
-        left_pair, right_pair = left, expected
+        local left_pair, right_pair = left, expected
         local pos = next_pos(row, col, nodes)
         if pos == nil then
             return
         end
 
-        M.execute(pos)
+        M.execute(pos, left, expected)
     else
         local cursor_char = surrounding_char(row + 1, col)
-        right_pair = cursor_char
         local pos = next_pos(row, col, state[head])
         if pos == nil then
             return
         end
 
-        M.execute(pos)
+        -- Clip current right pair
+        M.execute(pos, nil, cursor_char)
     end
 end
 
-function M.execute(pos)
+function M.execute(pos, left_pair, right_pair)
     vim.cmd([[norm! m']])
     local cur_row, cur_col = get_cursor()
     local first, end_row, end_col = unpack(pos)
-    if first then
+    if first and left_pair ~= nil then
         -- |text -> (|text
         vim.api.nvim_put({ left_pair }, "c", false, true)
     else
@@ -168,6 +184,7 @@ function M.execute(pos)
     end
 end
 
+---@return table<integer, integer, integer, integer>
 function M.get_nodes(row, col)
     local node_ranges = {}
 
@@ -190,6 +207,7 @@ function M.get_nodes(row, col)
         if start_row == row then
             table.insert(node_ranges, { start_row, start_col, end_row, end_col })
         end
+        ---@diagnostic disable-next-line: cast-local-type
         node = node:parent()
     end
 
@@ -199,6 +217,11 @@ function M.get_nodes(row, col)
     end
 
     return node_ranges
+end
+
+function M.setup(opts)
+    opts = opts or {}
+    M.config = vim.tbl_deep_extend("force", M.config, opts)
 end
 
 return M
