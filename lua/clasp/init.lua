@@ -14,10 +14,10 @@ M.clean = function()
     link = {}
 end
 
----@return string, string
+---@return string, string, string
 local function surrounding_char(row, col)
-    local x = vim.api.nvim_buf_get_text(0, row - 1, col, row - 1, col + 2, {})[1]
-    return x:sub(1, 1), x:sub(2, 2)
+    local x = vim.api.nvim_buf_get_text(0, row - 1, col, row - 1, col + 3, {})[1]
+    return x:sub(1, 1), x:sub(2, 2), x:sub(3, 3)
 end
 
 ---@return integer, integer
@@ -127,7 +127,20 @@ function M.wrap(direction)
     end
 
     local head = link_head(cursor_id(row, col))
-    local left, right = surrounding_char(row + 1, col)
+    local left, right, c = surrounding_char(row + 1, col)
+    if right == "" or c == "" then
+        if #vim.api.nvim_buf_get_lines(0, 0, -1, false) <= row + 1 then
+            vim.notify("[clever_wrap] At the end of buffer", vim.log.levels.WARN)
+            return
+        end
+        vim.api.nvim_win_set_cursor(0, { row + 2, 0 })
+        local _, non_space_col = vim.api.nvim_get_current_line():find("^%s*")
+        vim.api.nvim_win_set_cursor(0, { row + 2, non_space_col })
+        row, col = get_cursor()
+        if vim.fn.mode() == "i" then
+            col = col - 1
+        end
+    end
     if head == nil or state[head] == nil then
         clean_state(row, col)
         local expected = M.config.pairs[left]
