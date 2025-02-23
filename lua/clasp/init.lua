@@ -16,8 +16,13 @@ end
 
 ---@return string, string, string
 local function surrounding_char(row, col)
-    local x = vim.api.nvim_buf_get_text(0, row - 1, col, row - 1, col + 3, {})[1]
-    return x:sub(1, 1), x:sub(2, 2), x:sub(3, 3)
+    if col > 0 then
+        local x = vim.api.nvim_buf_get_text(0, row - 1, col - 1, row - 1, col + 3, {})[1]
+        return x:sub(1, 1), x:sub(2, 2), x:sub(3, 3)
+    else
+        local x = vim.api.nvim_buf_get_text(0, row - 1, col, row - 1, col + 3, {})[1]
+        return "", x:sub(2, 2), x:sub(3, 3)
+    end
 end
 
 ---@return integer, integer
@@ -121,33 +126,42 @@ end
 function M.wrap(direction)
     local origin = ""
     local row, col = get_cursor()
+
     if vim.fn.mode() == "i" then
+        -- Break undo sequence, ensure 'u' keep the original pair.
+        vim.cmd("let &undolevels = &undolevels")
         vim.cmd("stopinsert")
         col = col - 1
     end
 
     local head = link_head(cursor_id(row, col))
-    local left, right, c = surrounding_char(row + 1, col)
-    if right == "" or c == "" then
-        if #vim.api.nvim_buf_get_lines(0, 0, -1, false) <= row + 1 then
-            vim.notify("[clever_wrap] At the end of buffer", vim.log.levels.WARN)
-            return
-        end
-        vim.api.nvim_win_set_cursor(0, { row + 2, 0 })
-        local _, non_space_col = vim.api.nvim_get_current_line():find("^%s*")
-        vim.api.nvim_win_set_cursor(0, { row + 2, non_space_col })
-        row, col = get_cursor()
-        if vim.fn.mode() == "i" then
-            col = col - 1
-        end
-    end
     if head == nil or state[head] == nil then
         clean_state(row, col)
-        local expected = M.config.pairs[left]
-        if expected == nil then
-            vim.notify("[clever_wrap] Your cursor is not in a pair", vim.log.levels.WARN)
+
+        local cursor_left, cursor_char, right = surrounding_char(row + 1, col)
+        if cursor_char ~= "" and M.config.pairs[cursor_left] == cursor_char and col > 0 then
+            if vim.fn.mode() == "i" then
+                vim.api.nvim_win_set_cursor(0, { row + 1, col })
+            else
+                vim.api.nvim_win_set_cursor(0, { row + 1, col - 1 })
+            end
+            M.wrap(direction)
             return
         end
+
+        if #vim.api.nvim_get_current_line() <= col + 2 then
+            vim.notify("[clever_wrap] cursor is at the end of the line", vim.log.levels.WARN)
+            return
+        end
+        local expected = M.config.pairs[cursor_char]
+        if expected == nil then
+            vim.notify(
+                string.format('[clever_wrap] Your cursor is in "%s", not a pair', cursor_char),
+                vim.log.levels.WARN
+            )
+            return
+        end
+
         if expected ~= right then
             -- (|text ->  |text
             vim.api.nvim_buf_set_text(0, row, col, row, col + 1, { "" })
@@ -166,15 +180,15 @@ function M.wrap(direction)
             state[head] = nodes
         end
 
-        local left_pair, right_pair = left, expected
+        local left_pair, right_pair = cursor_char, expected
         local pos = next_pos(row, col, nodes, "next")
         if pos == nil then
             return
         end
 
-        M.execute(pos, left, expected)
+        M.execute(pos, cursor_char, expected)
     else
-        local cursor_char = surrounding_char(row + 1, col)
+        local _, cursor_char = surrounding_char(row + 1, col)
         local pos = next_pos(row, col, state[head], direction)
         if pos == nil then
             return
@@ -214,6 +228,8 @@ function M.execute(pos, left_pair, right_pair)
     if vim.fn.mode() == "i" then
         vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col + 2 })
     end
+    -- inline extmark may leave cursor in a wrong position in neovide
+    vim.cmd("redraw")
 end
 
 ---@return { start_row: integer, start_col: integer, end_row: integer, end_col: integer }
