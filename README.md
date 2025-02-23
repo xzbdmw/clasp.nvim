@@ -9,7 +9,11 @@ A pair wrapping plugin with:
 ## Show case with multicursor.nvim
 
 
-https://github.com/user-attachments/assets/b5e4a531-16ce-4d32-89e9-22b85b071e29
+
+
+https://github.com/user-attachments/assets/4e286d3d-6548-4f43-8f9d-28eaeaa27206
+
+
 
 
 
