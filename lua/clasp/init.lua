@@ -5,8 +5,7 @@ M.config = {}
 local state = {}
 local link = {}
 local pair = { ["{"] = "}", ['"'] = '"', ["("] = ")", ["["] = "]" }
-local left_p, right_p
-local pos
+local left_pair, right_pair
 
 M.clean = function()
     state = {}
@@ -25,11 +24,12 @@ local function get_cursor()
     return row, col
 end
 
-local function link_start(id)
+local function link_head(id)
     if link[id] == nil then
         return nil
     end
     local try = 0
+    -- avoid dead loop
     while link[id] ~= nil and try < 30 do
         try = try + 1
         id = link[id]
@@ -45,7 +45,7 @@ local function next_pos(row, col, nodes)
     for i, range in ipairs(nodes) do
         local start_row, start_col, end_row, end_col = unpack(range)
         if (start_row == row and end_col > col - 1) or (end_row > row) then
-            return { i == 1, start_row, start_col, end_row, end_col }
+            return { i == 1, end_row, end_col }
         end
     end
     return nil
@@ -55,7 +55,7 @@ local function prev_pos(row, col, nodes)
     for i, range in ipairs(nodes) do
         local start_row, start_col, end_row, end_col = unpack(range)
         if (start_row == row and end_col < col - 1) or (end_row < row) then
-            return { i == 1, start_row, start_col, end_row, end_col }
+            return { i == 1, end_row, end_col }
         end
     end
     return nil
@@ -102,7 +102,7 @@ function M.jump(direction)
         col = col - 1
     end
 
-    local head = link_start(cursor_id(row, col))
+    local head = link_head(cursor_id(row, col))
     local left, right = surrounding_char(row + 1, col)
     if head == nil or state[head] == nil then
         local expected = pair[left]
@@ -111,8 +111,10 @@ function M.jump(direction)
             return
         end
         if expected ~= right then
+            -- (|text ->  |text
             vim.api.nvim_buf_set_text(0, row, col, row, col + 1, { "" })
         else
+            -- (|)text -> |text
             vim.api.nvim_buf_set_text(0, row, col, row, col + 2, { "" })
         end
 
@@ -123,39 +125,43 @@ function M.jump(direction)
             state[head] = nodes
         end
 
-        left_p, right_p = left, expected
-        pos = next_pos(row, col, nodes)
+        left_pair, right_pair = left, expected
+        local pos = next_pos(row, col, nodes)
         if pos == nil then
             return
         end
 
-        M.execute()
+        M.execute(pos)
     else
         local cursor_char = surrounding_char(row + 1, col)
-        right_p = cursor_char
-        pos = next_pos(row, col, state[head])
+        right_pair = cursor_char
+        local pos = next_pos(row, col, state[head])
         if pos == nil then
             return
         end
 
-        M.execute()
+        M.execute(pos)
     end
 end
 
-function M.execute()
+function M.execute(pos)
     vim.cmd([[norm! m']])
-    local pre_row, prev_col = get_cursor()
-    local first, start_row, start_col, end_row, end_col = unpack(pos)
+    local cur_row, cur_col = get_cursor()
+    local first, end_row, end_col = unpack(pos)
     if first then
-        vim.api.nvim_put({ left_p }, "c", false, true)
+        -- |text -> (|text
+        vim.api.nvim_put({ left_pair }, "c", false, true)
     else
-        vim.api.nvim_buf_set_text(0, pre_row, prev_col, pre_row, prev_col + 1, { "" })
+        -- )text -> |text
+        vim.api.nvim_buf_set_text(0, cur_row, cur_col, cur_row, cur_col + 1, { "" })
     end
+    -- |text -> text|
     vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col })
-    vim.api.nvim_put({ right_p }, "c", true, false)
+    -- text| -> text)|
+    vim.api.nvim_put({ right_pair }, "c", true, false)
     local row, col = get_cursor()
     if link[cursor_id(row, col)] == nil then
-        link[cursor_id(row, col)] = string.format("%d!!%d", pre_row, prev_col)
+        link[cursor_id(row, col)] = string.format("%d!!%d", cur_row, cur_col)
     end
     if vim.fn.mode() == "i" then
         vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col + 2 })
