@@ -1,11 +1,10 @@
-# Clasp ⎇
+# Clasp.nvim ⎇
 **Cl**ever **A**daptive **S**urround **P**airs
 
 A pair wrapping plugin with:
-* **Fix up missing pairs** (`{}`, `""`, `()`...)
+* **Single Keymap** (`<c-l>` to cycling forward/backward, `u` to undo previous cycle)
 * **Incremental node traversal** (TS-powered)
 * **Multi-cursor** aware, works with [multicursor.nvim](https://github.com/jake-stewart/multicursor.nvim)
-* **Non-destructive editing** (preserves undo history)
 
 ## Show case with multicursor.nvim
 
@@ -22,14 +21,38 @@ With **lazy.nvim**:
 return {
     "xzbdmw/clasp.nvim",
     config = function()
-        -- You don't need to set these options.
-        require("clasp").setup({})
+        require("clasp").setup({
+            pairs = { ["{"] = "}", ['"'] = '"', ["("] = ")", ["["] = "]" },
+        })
+
+        -- jumping from smallest region to largest region
         vim.keymap.set({ "n", "i" }, "<c-l>",function()
-            require("clasp").jump()
+            require("clasp").wrap('next')
+        end)
+
+        -- jumping from largest region to smallest region
+        vim.keymap.set({ "n", "i" }, "<c-l>",function()
+            require("clasp").wrap('prev')
+        end)
+
+        -- If you want to exclude nodes whose end row is not current row
+        vim.keymap.set({ "n", "i" }, "<c-l>",function()
+            require("clasp").wrap('next', function(nodes)
+                local n = {}
+                for _, node in ipairs(nodes) do
+                    if node.end_row == vim.api.nvim_win_get_cursor(0)[1] - 1 then
+                        table.insert(n, node)
+                    end
+                end
+                return n
+            end)
         end)
     end,
 }
 ```
+## Limitations
+
+If you use have multiple cursors, make sure you call `wrap` in normal mode.
 
 
 ## License

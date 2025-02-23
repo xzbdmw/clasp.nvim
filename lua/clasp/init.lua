@@ -1,6 +1,8 @@
----@alias Nodes table<integer, integer, integer, integer>
+---@alias clasp.Nodes {start_row: integer, start_col: integer, end_row: integer, end_col: integer}
 local M = {}
 
+---@class clasp.Config
+---@field pairs table<string,string>
 M.config = {
     pairs = { ["{"] = "}", ['"'] = '"', ["("] = ")", ["["] = "]" },
 }
@@ -65,7 +67,7 @@ end
 
 ---@param row integer
 ---@param col integer
----@param nodes { start_row: integer, start_col: integer, end_row: integer, end_col: integer }
+---@param nodes clasp.Nodes[]
 ---@param direction "next"|"prev"
 ---@return { first: boolean, end_row: integer, end_col: integer }|nil
 local function next_pos(row, col, nodes, direction)
@@ -123,7 +125,8 @@ local function clean_state(row, col)
 end
 
 ---@param direction "next"|"prev"
-function M.wrap(direction)
+---@param filter (fun(node: clasp.Nodes[]): clasp.Nodes[])|nil
+function M.wrap(direction, filter)
     local origin = ""
     local row, col = get_cursor()
 
@@ -170,7 +173,7 @@ function M.wrap(direction)
             vim.api.nvim_buf_set_text(0, row, col, row, col + 2, { "" })
         end
 
-        local nodes = deduplicate(M.get_nodes(row, col))
+        local nodes = deduplicate(M.get_nodes(row, col, filter))
         if direction == "prev" then
             nodes = reverse(nodes)
         end
@@ -232,9 +235,13 @@ function M.execute(pos, left_pair, right_pair)
     vim.cmd("redraw")
 end
 
----@return { start_row: integer, start_col: integer, end_row: integer, end_col: integer }
-function M.get_nodes(row, col)
+---@param row integer
+---@param col integer
+---@param filter (fun(node: clasp.Nodes[]): clasp.Nodes[])|nil
+---@return clasp.Nodes[]
+function M.get_nodes(row, col, filter)
     local node_ranges = {}
+    ---@cast node_ranges clasp.Nodes[]
 
     local ok = pcall(function()
         vim.treesitter.get_parser(0, vim.bo.filetype):parse(true)
@@ -268,6 +275,10 @@ function M.get_nodes(row, col)
             node_ranges,
             { start_row = row, start_col = col, end_row = row, end_col = #vim.api.nvim_get_current_line() }
         )
+    end
+
+    if type(filter) == "function" then
+        node_ranges = filter(node_ranges)
     end
 
     return node_ranges
