@@ -29,7 +29,7 @@ return {
     "xzbdmw/clasp.nvim",
     config = function()
         require("clasp").setup({
-            pairs = { ["{"] = "}", ['"'] = '"', ["("] = ")", ["["] = "]" },
+            pairs = { ["{"] = "}", ['"'] = '"', ["'"] = "'", ["("] = ")", ["["] = "]" },
         })
 
         -- jumping from smallest region to largest region

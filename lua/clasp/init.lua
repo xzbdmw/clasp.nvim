@@ -4,7 +4,7 @@ local M = {}
 ---@class clasp.Config
 ---@field pairs table<string,string>
 M.config = {
-    pairs = { ["{"] = "}", ['"'] = '"', ["("] = ")", ["["] = "]" },
+    pairs = { ["{"] = "}", ['"'] = '"', ["'"] = "'", ["("] = ")", ["["] = "]" },
 }
 
 local state = {}
