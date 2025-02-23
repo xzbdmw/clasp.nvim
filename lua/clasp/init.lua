@@ -102,7 +102,7 @@ local function clean_state(row, col)
         -- This only fires upon pair state creation, so subsequent call to
         -- wrap do not invalidate state.
         local duration = 0.000001 * (vim.loop.hrtime() - mc_last_create_time)
-        if duration > 3000 then
+        if duration > 1000 then
             mc_last_create_time = vim.uv.hrtime()
             M.clean()
         end
@@ -166,15 +166,15 @@ function M.execute(pos, left_pair, right_pair)
     local first, end_row, end_col = unpack(pos)
     if first and left_pair ~= nil then
         -- |text -> (|text
-        vim.api.nvim_put({ left_pair }, "c", false, true)
+        vim.api.nvim_buf_set_text(0, cur_row, cur_col, cur_row, cur_col, { left_pair })
     else
         -- )text -> |text
         vim.api.nvim_buf_set_text(0, cur_row, cur_col, cur_row, cur_col + 1, { "" })
     end
-    -- |text -> text|
-    vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col })
     -- text| -> text)|
-    vim.api.nvim_put({ right_pair }, "c", true, false)
+    vim.api.nvim_buf_set_text(0, end_row, end_col + 1, end_row, end_col + 1, { right_pair })
+    -- |text -> text|
+    vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col + 1 })
     local row, col = get_cursor()
     if link[cursor_id(row, col)] == nil then
         link[cursor_id(row, col)] = string.format("%d!!%d", cur_row, cur_col)
