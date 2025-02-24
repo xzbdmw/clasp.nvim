@@ -23,7 +23,7 @@ local function surrounding_char(row, col)
         return x:sub(1, 1), x:sub(2, 2), x:sub(3, 3)
     else
         local x = vim.api.nvim_buf_get_text(0, row - 1, col, row - 1, col + 3, {})[1]
-        return "", x:sub(2, 2), x:sub(3, 3)
+        return "", x:sub(1, 1), x:sub(2, 2)
     end
 end
 
