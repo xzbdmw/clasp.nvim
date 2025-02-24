@@ -4,7 +4,7 @@ local M = {}
 ---@class clasp.Config
 ---@field pairs table<string,string>
 M.config = {
-    pairs = { ["{"] = "}", ['"'] = '"', ["'"] = "'", ["("] = ")", ["["] = "]" },
+    pairs = { ["{"] = "}", ['"'] = '"', ["'"] = "'", ["("] = ")", ["["] = "]", ["<"] = ">" },
 }
 
 local state = {}
@@ -127,7 +127,6 @@ end
 ---@param direction "next"|"prev"
 ---@param filter (fun(node: clasp.Nodes[]): clasp.Nodes[])|nil
 function M.wrap(direction, filter)
-    local origin = ""
     local row, col = get_cursor()
 
     if vim.fn.mode() == "i" then
@@ -148,20 +147,17 @@ function M.wrap(direction, filter)
             else
                 vim.api.nvim_win_set_cursor(0, { row + 1, col - 1 })
             end
-            M.wrap(direction)
+            M.wrap(direction, filter)
             return
         end
 
         if #vim.api.nvim_get_current_line() <= col + 2 then
-            vim.notify("[clever_wrap] cursor is at the end of the line", vim.log.levels.WARN)
+            vim.notify("[clasp.nvim] cursor is at the end of the line", vim.log.levels.WARN)
             return
         end
         local expected = M.config.pairs[cursor_char]
         if expected == nil then
-            vim.notify(
-                string.format('[clever_wrap] Your cursor is in "%s", not a pair', cursor_char),
-                vim.log.levels.WARN
-            )
+            vim.notify(string.format('[clasp.nvim] cursor sits on "%s", not a pair', cursor_char), vim.log.levels.WARN)
             return
         end
 
@@ -216,17 +212,17 @@ function M.execute(pos, left_pair, right_pair)
         -- )text -> |text
         vim.api.nvim_buf_set_text(0, cur_row, cur_col, cur_row, cur_col + 1, { "" })
     end
-    -- text| -> text)|
+    -- |text -> |text)
     if end_row == cur_row then
         vim.api.nvim_buf_set_text(0, end_row, end_col + 1, end_row, end_col + 1, { right_pair })
     else
         vim.api.nvim_buf_set_text(0, end_row, end_col, end_row, end_col, { right_pair })
     end
-    -- |text -> text|
+    -- |text) -> text)|
     vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col + 1 })
     local row, col = get_cursor()
     if link[cursor_id(row, col)] == nil then
-        link[cursor_id(row, col)] = string.format("%d!!%d", cur_row, cur_col)
+        link[cursor_id(row, col)] = cursor_id(cur_row, cur_col)
     end
     if vim.fn.mode() == "i" then
         vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col + 2 })
@@ -244,7 +240,7 @@ function M.get_nodes(row, col, filter)
     ---@cast node_ranges clasp.Nodes[]
 
     local ok = pcall(function()
-        vim.treesitter.get_parser(0, vim.bo.filetype):parse(true)
+        vim.treesitter.get_parser(0, vim.bo.filetype):parse()
     end)
     if not ok then
         return {}
