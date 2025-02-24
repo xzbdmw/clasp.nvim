@@ -58,7 +58,7 @@ end
 ---@return { first: boolean, end_row: integer, end_col: integer }|nil
 local function prev_pos(row, col, nodes)
     for i, range in ipairs(nodes) do
-        if (range.start_row == row and range.end_col < col - 1) or (range.end_row < row) then
+        if (range.end_row == row and range.end_col < col) or (range.end_row < row) then
             return { first = i == 1, end_row = range.end_row, end_col = range.end_col }
         end
     end
@@ -75,7 +75,7 @@ local function next_pos(row, col, nodes, direction)
         return prev_pos(row, col, nodes)
     end
     for i, range in ipairs(nodes) do
-        if (range.start_row == row and range.end_col > col - 1) or (range.end_row > row) then
+        if (range.end_row == row and range.end_col > col) or (range.end_row > row) then
             return { first = i == 1, end_row = range.end_row, end_col = range.end_col }
         end
     end
@@ -205,7 +205,7 @@ function M.execute(pos, left_pair, right_pair)
     vim.cmd([[norm! m']])
     local cur_row, cur_col = get_cursor()
     local first, end_row, end_col = pos.first, pos.end_row, pos.end_col
-    if first and left_pair ~= nil then
+    if first then
         -- |text -> (|text
         vim.api.nvim_buf_set_text(0, cur_row, cur_col, cur_row, cur_col, { left_pair })
     else
@@ -213,19 +213,15 @@ function M.execute(pos, left_pair, right_pair)
         vim.api.nvim_buf_set_text(0, cur_row, cur_col, cur_row, cur_col + 1, { "" })
     end
     -- |text -> |text)
-    if end_row == cur_row then
-        vim.api.nvim_buf_set_text(0, end_row, end_col + 1, end_row, end_col + 1, { right_pair })
-    else
-        vim.api.nvim_buf_set_text(0, end_row, end_col, end_row, end_col, { right_pair })
-    end
+    vim.api.nvim_buf_set_text(0, end_row, end_col, end_row, end_col, { right_pair })
     -- |text) -> text)|
-    vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col + 1 })
+    vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col })
     local row, col = get_cursor()
     if link[cursor_id(row, col)] == nil then
         link[cursor_id(row, col)] = cursor_id(cur_row, cur_col)
     end
     if vim.fn.mode() == "i" then
-        vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col + 2 })
+        vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col + 1 })
     end
     -- inline extmark may leave cursor in a wrong position in neovide
     vim.cmd("redraw")
@@ -256,10 +252,11 @@ function M.get_nodes(row, col, filter)
     while node do
         local start_row, start_col, end_row, end_col = node:range()
         if start_row == row then
-            table.insert(
-                node_ranges,
-                { start_row = start_row, start_col = start_col, end_row = end_row, end_col = end_col }
-            )
+            local n = { start_row = start_row, start_col = start_col, end_row = end_row, end_col = end_col }
+            if end_row == row then
+                n.end_col = n.end_col + 1
+            end
+            table.insert(node_ranges, n)
         end
         ---@diagnostic disable-next-line: cast-local-type
         node = node:parent()
