@@ -8,17 +8,7 @@ A pair wrapping plugin with:
 
 ## Show case with multicursor.nvim
 
-
-
-
 https://github.com/user-attachments/assets/8f09f5ff-00ef-45dd-a76e-a40c8ecd09c1
-
-
-
-
-
-
-
 
 ## Installation
 
@@ -30,6 +20,8 @@ return {
     config = function()
         require("clasp").setup({
             pairs = { ["{"] = "}", ['"'] = '"', ["'"] = "'", ["("] = ")", ["["] = "]", ["<"] = ">" },
+            -- If called from insert mode, do not return to normal mode.
+            keep_insert_mode = true,
         })
 
         -- jumping from smallest region to largest region
@@ -59,7 +51,7 @@ return {
 ```
 ## Limitations
 
-If you use have multiple cursors, make sure you call `wrap` in normal mode.
+If you have multiple cursors, make sure you call `wrap` in normal mode.
 
 
 ## License

@@ -5,6 +5,8 @@ local M = {}
 ---@field pairs table<string,string>
 M.config = {
     pairs = { ["{"] = "}", ['"'] = '"', ["'"] = "'", ["("] = ")", ["["] = "]", ["<"] = ">" },
+    -- If called from insert mode, do not return to normal mode.
+    keep_insert_mode = true,
 }
 
 local state = {}
@@ -16,6 +18,8 @@ M.clean = function()
     link = {}
 end
 
+---@param row integer
+---@param col integer
 ---@return string, string, string
 local function surrounding_char(row, col)
     if col > 0 then
@@ -50,11 +54,16 @@ local function link_head(id)
     return id
 end
 
+---@param row integer
+---@param col integer
 ---@return string
 local cursor_id = function(row, col)
     return string.format("%d!!%d", row, col)
 end
 
+---@param row integer
+---@param col integer
+---@param nodes clasp.Nodes[]
 ---@return { first: boolean, end_row: integer, end_col: integer }|nil
 local function prev_pos(row, col, nodes)
     for i, range in ipairs(nodes) do
@@ -114,8 +123,8 @@ local function clean_state(row, col)
             mc_last_create_time = vim.uv.hrtime()
             return
         end
-        -- This only fires upon pair state creation, so subsequent call to
-        -- wrap do not invalidate state.
+        -- This only fires upon pair state creation, so subsequent calls to
+        -- `wrap` do not invalidate state.
         local duration = 0.000001 * (vim.loop.hrtime() - mc_last_create_time)
         if duration > 1000 then
             mc_last_create_time = vim.uv.hrtime()
@@ -132,7 +141,9 @@ function M.wrap(direction, filter)
     if vim.fn.mode() == "i" then
         -- Break undo sequence, ensure 'u' keep the original pair.
         vim.cmd("let &undolevels = &undolevels")
-        vim.cmd("stopinsert")
+        if not M.config.keep_insert_mode then
+            vim.cmd("stopinsert")
+        end
         col = col - 1
     end
 
@@ -185,7 +196,7 @@ function M.wrap(direction, filter)
             return
         end
 
-        M.execute(pos, cursor_char, expected)
+        M.execute(row, col, pos, cursor_char, expected)
     else
         local _, cursor_char = surrounding_char(row + 1, col)
         local pos = next_pos(row, col, state[head], direction)
@@ -194,16 +205,15 @@ function M.wrap(direction, filter)
         end
 
         -- Clip current right pair
-        M.execute(pos, nil, cursor_char)
+        M.execute(row, col, pos, nil, cursor_char)
     end
 end
 
 ---@param pos { first: boolean, end_row: integer, end_col: integer }
 ---@param left_pair string|nil
 ---@param right_pair string
-function M.execute(pos, left_pair, right_pair)
+function M.execute(cur_row, cur_col, pos, left_pair, right_pair)
     vim.cmd([[norm! m']])
-    local cur_row, cur_col = get_cursor()
     local first, end_row, end_col = pos.first, pos.end_row, pos.end_col
     if first then
         -- |text -> (|text
@@ -216,9 +226,8 @@ function M.execute(pos, left_pair, right_pair)
     vim.api.nvim_buf_set_text(0, end_row, end_col, end_row, end_col, { right_pair })
     -- |text) -> text)|
     vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col })
-    local row, col = get_cursor()
-    if link[cursor_id(row, col)] == nil then
-        link[cursor_id(row, col)] = cursor_id(cur_row, cur_col)
+    if link[cursor_id(end_row, end_col)] == nil then
+        link[cursor_id(end_row, end_col)] = cursor_id(cur_row, cur_col)
     end
     if vim.fn.mode() == "i" then
         vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col + 1 })
