@@ -7,6 +7,7 @@ M.config = {
     pairs = { ["{"] = "}", ['"'] = '"', ["'"] = "'", ["("] = ")", ["["] = "]", ["<"] = ">" },
     -- If called from insert mode, do not return to normal mode.
     keep_insert_mode = true,
+    remove_pattern = nil,
 }
 
 local state = {}
@@ -180,7 +181,21 @@ function M.wrap(direction, filter)
             vim.api.nvim_buf_set_text(0, row, col, row, col + 2, { "" })
         end
 
-        local nodes = deduplicate(M.get_nodes(row, col, filter))
+        local nodes
+        if M.config.remove_pattern then
+            local text = vim.api.nvim_buf_get_text(0, row, 0, row, col, {})[1]
+            local removed_chars = text:match(M.config.remove_pattern)
+            if removed_chars ~= nil then
+                vim.api.nvim_buf_set_text(0, row, col - #removed_chars, row, col, { string.rep(" ", #removed_chars) })
+            end
+            nodes = deduplicate(M.get_nodes(row, col, filter))
+            if removed_chars ~= nil then
+                vim.api.nvim_buf_set_text(0, row, col - #removed_chars, row, col, { removed_chars })
+            end
+        else
+            nodes = deduplicate(M.get_nodes(row, col, filter))
+        end
+
         if direction == "prev" then
             nodes = reverse(nodes)
         end
