@@ -265,7 +265,7 @@ function M.get_nodes(row, col, filter)
     if not ok then
         return {}
     end
-    local cursor_node = vim.treesitter.get_node()
+    local cursor_node = vim.treesitter.get_node({ ignore_injections = false })
     if not cursor_node then
         return {}
     end
