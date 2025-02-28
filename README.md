@@ -46,12 +46,29 @@ return {
         })
 
         -- jumping from smallest region to largest region
+
+        -- Initial state:
+        -- func(|)vim.keymap.foo('bar')
+
+        -- Keep pressing <c-l>:
+        -- func(vim)|.keymap.foo('bar')
+        -- func(vim.keymap)|.foo('bar')
+        -- func(vim.keymap.foo('bar'))|
         vim.keymap.set({ "n", "i" }, "<c-l>", function()
             require("clasp").wrap('next')
         end)
 
         -- jumping from largest region to smallest region
-        vim.keymap.set({ "n", "i" }, "<c-l>", function()
+
+        -- Initial state:
+        -- func(|)vim.keymap.foo('bar')
+
+        -- Keep pressing <c-;>
+        -- func(vim.keymap.foo('bar'))|
+        -- func(vim.keymap)|.foo('bar')
+        -- func(vim)|.keymap.foo('bar')
+        -- func(|)vim.keymap.foo('bar')
+        vim.keymap.set({ "n", "i" }, "<c-;>", function()
             require("clasp").wrap('prev')
         end)
 
