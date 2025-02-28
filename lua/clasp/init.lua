@@ -46,11 +46,14 @@ local function link_head(id)
     if link[id] == nil then
         return nil
     end
+    if link[id].line ~= vim.api.nvim_get_current_line() then
+        return nil
+    end
     local try = 0
     -- avoid dead loop
     while link[id] ~= nil and try < 30 do
         try = try + 1
-        id = link[id]
+        id = link[id].id
     end
     return id
 end
@@ -252,7 +255,7 @@ function M.execute(cur_row, cur_col, pos, left_pair, right_pair)
     -- |text) -> text)|
     vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col })
     if link[cursor_id(end_row, end_col)] == nil then
-        link[cursor_id(end_row, end_col)] = cursor_id(cur_row, cur_col)
+        link[cursor_id(end_row, end_col)] = { id = cursor_id(cur_row, cur_col), line = vim.api.nvim_get_current_line() }
     end
     if vim.fn.mode() == "i" then
         vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col + 1 })
