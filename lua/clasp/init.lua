@@ -137,6 +137,7 @@ end
 ---@param direction "next"|"prev"
 ---@param filter (fun(node: clasp.Nodes[]): clasp.Nodes[])|nil
 function M.wrap(direction, filter)
+    direction = direction or "next"
     local row, col = get_cursor()
 
     if vim.fn.mode() == "i" then
@@ -149,6 +150,11 @@ function M.wrap(direction, filter)
     end
 
     local head = link_head(cursor_id(row, col))
+    -- undo can't put cursor pass to end of line in insert mode, so try next one.
+    if head == nil and #vim.api.nvim_buf_get_lines(0, row, row + 1, false)[1] == col + 2 then
+        head = link_head(cursor_id(row, col + 1))
+        col = col + 1
+    end
     if head == nil or state[head] == nil then
         clean_state(row, col)
 
@@ -200,9 +206,9 @@ function M.wrap(direction, filter)
             nodes = reverse(nodes)
         end
         if head == nil then
-            state[cursor_id(row, col)] = nodes
+            state[cursor_id(row, col)] = { nodes = nodes, direction = direction }
         else
-            state[head] = nodes
+            state[head] = { nodes = nodes, direction = direction }
         end
 
         local left_pair, right_pair = cursor_char, expected
@@ -213,8 +219,12 @@ function M.wrap(direction, filter)
 
         M.execute(row, col, pos, cursor_char, expected)
     else
+        if state[head].direction ~= direction then
+            vim.cmd("undo")
+            return
+        end
         local _, cursor_char = surrounding_char(row + 1, col)
-        local pos = next_pos(row, col, state[head], direction)
+        local pos = next_pos(row, col, state[head].nodes, direction)
         if pos == nil then
             return
         end
