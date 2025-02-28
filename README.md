@@ -85,7 +85,8 @@ If you have multiple cursors, make sure you call `wrap` in normal mode.
       not have a valid parse tree so position may be wrong compared to regex solution.
     - The main motivation for writting this plugin is to support multi-cursor. So
       it works on normal mode and remembers each cursor's parsing state.
-
+- [nvim-autopairs](https://github.com/windwp/nvim-autopairs)
+    - Uses hint based fast wrap, each possible position has one label, only works for current line.
 
 ## License
 
