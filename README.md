@@ -45,7 +45,9 @@ return {
             remove_pattern = nil,
         })
 
-        -- jumping from smallest region to largest region
+        -- jumping from smallest region to largest region.
+        -- Press 'u' in normal mode or bind '<cmd>undo<cr>'
+        -- in insert mode to undo. You can interleave undo and wrap.
 
         -- Initial state:
         -- func(|)vim.keymap.foo('bar')
@@ -54,6 +56,9 @@ return {
         -- func(vim)|.keymap.foo('bar')
         -- func(vim.keymap)|.foo('bar')
         -- func(vim.keymap.foo('bar'))|
+
+        -- Press 'u'
+        -- func(vim.keymap)|.foo('bar')
         vim.keymap.set({ "n", "i" }, "<c-l>", function()
             require("clasp").wrap('next')
         end)
@@ -67,7 +72,9 @@ return {
         -- func(vim.keymap.foo('bar'))|
         -- func(vim.keymap)|.foo('bar')
         -- func(vim)|.keymap.foo('bar')
-        -- func(|)vim.keymap.foo('bar')
+
+        -- Press 'u'
+        -- func(vim.keymap)|.foo('bar')
         vim.keymap.set({ "n", "i" }, "<c-;>", function()
             require("clasp").wrap('prev')
         end)
