@@ -46,7 +46,7 @@ local function link_head(id)
     if link[id] == nil then
         return nil
     end
-    if link[id].line ~= vim.api.nvim_get_current_line() then
+    if not M.in_multi_cursor() and link[id].line ~= vim.api.nvim_get_current_line() then
         return nil
     end
     local try = 0
@@ -117,10 +117,15 @@ local function reverse(tbl)
     return res
 end
 
+---@return boolean
+function M.in_multi_cursor()
+    return package.loaded["multicursor-nvim"] and require("multicursor-nvim").numCursors() > 1
+end
+
 ---@param row integer
 ---@param col integer
 local function clean_state(row, col)
-    if not (package.loaded["multicursor-nvim"] and require("multicursor-nvim").numCursors() > 1) then
+    if not M.in_multi_cursor() then
         M.clean()
     else
         if mc_last_create_time == nil then
