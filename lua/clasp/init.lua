@@ -24,10 +24,10 @@ end
 ---@return string, string, string
 local function surrounding_char(row, col)
     if col > 0 then
-        local x = vim.api.nvim_buf_get_text(0, row - 1, col - 1, row - 1, col + 3, {})[1]
+        local x = vim.api.nvim_buf_get_text(0, row - 1, col - 1, row - 1, col + 2, {})[1]
         return x:sub(1, 1), x:sub(2, 2), x:sub(3, 3)
     else
-        local x = vim.api.nvim_buf_get_text(0, row - 1, col, row - 1, col + 3, {})[1]
+        local x = vim.api.nvim_buf_get_text(0, row - 1, col, row - 1, col + 2, {})[1]
         return "", x:sub(1, 1), x:sub(2, 2)
     end
 end
@@ -161,7 +161,9 @@ function M.wrap(direction, filter)
     -- undo can't put cursor pass to end of line in insert mode, so try next one.
     if head == nil and #vim.api.nvim_buf_get_lines(0, row, row + 1, false)[1] == col + 2 then
         head = link_head(cursor_id(row, col + 1))
-        col = col + 1
+        if not (head == nil or state[head] == nil) then
+            col = col + 1
+        end
     end
     if head == nil or state[head] == nil then
         clean_state(row, col)
@@ -177,10 +179,6 @@ function M.wrap(direction, filter)
             return
         end
 
-        if #vim.api.nvim_get_current_line() <= col + 2 then
-            vim.notify("[clasp.nvim] cursor is at the end of the line", vim.log.levels.WARN)
-            return
-        end
         local expected = M.config.pairs[cursor_char]
         if expected == nil then
             vim.notify(string.format('[clasp.nvim] cursor sits on "%s", not a pair', cursor_char), vim.log.levels.WARN)
