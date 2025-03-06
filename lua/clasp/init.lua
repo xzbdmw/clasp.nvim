@@ -142,6 +142,39 @@ local function clean_state(row, col)
     end
 end
 
+local function can_fallback(cursor_char)
+    for k, v in pairs(M.config.pairs) do
+        if cursor_char == v then
+            return true
+        end
+    end
+    return false
+end
+
+local function regex_fallback(row, col, cursor_char)
+    local text = vim.api.nvim_buf_get_text(0, row, col + 2, row, -1, {})[1]
+    local pos = text:find([=[[%'%"%>%]%)%}%,%`]]=])
+    local space_pos = text:find("[%a%d]%s")
+    if space_pos ~= nil and ((pos ~= nil and space_pos + 1 < pos) or (pos == nil)) then
+        pos = space_pos + 1
+    end
+    if pos == nil then
+        local end_col = #vim.api.nvim_buf_get_text(0, row, 0, row, -1, {})[1] - 1
+        if end_col ~= col then
+            M.execute(row, col, { first = false, end_row = row, end_col = end_col }, nil, cursor_char, false)
+        elseif row < vim.api.nvim_buf_line_count(0) - 1 then
+            M.execute(row, col, { first = false, end_row = row + 1, end_col = 0 }, nil, cursor_char, false)
+        end
+    else
+        local match_char = text:sub(pos, pos)
+        if vim.tbl_contains({ "'", '"', ">", "]", ")", "}", "`" }, match_char) then
+            M.execute(row, col, { first = false, end_row = row, end_col = col + pos + 1 }, nil, cursor_char, false)
+        elseif vim.tbl_contains({ ",", " " }, match_char) then
+            M.execute(row, col, { first = false, end_row = row, end_col = col + pos }, nil, cursor_char, false)
+        end
+    end
+end
+
 ---@param direction "next"|"prev"
 ---@param filter (fun(node: clasp.Nodes[]): clasp.Nodes[])|nil
 function M.wrap(direction, filter)
@@ -181,7 +214,14 @@ function M.wrap(direction, filter)
 
         local expected = M.config.pairs[cursor_char]
         if expected == nil then
-            vim.notify(string.format('[clasp.nvim] cursor sits on "%s", not a pair', cursor_char), vim.log.levels.WARN)
+            if can_fallback(cursor_char) then
+                regex_fallback(row, col, cursor_char)
+            else
+                vim.notify(
+                    string.format('[clasp.nvim] cursor sits on "%s", not a pair', cursor_char),
+                    vim.log.levels.WARN
+                )
+            end
             return
         end
 
@@ -223,7 +263,7 @@ function M.wrap(direction, filter)
             return
         end
 
-        M.execute(row, col, pos, cursor_char, expected)
+        M.execute(row, col, pos, cursor_char, expected, true)
     else
         if state[head].direction ~= direction then
             vim.cmd("undo")
@@ -236,14 +276,15 @@ function M.wrap(direction, filter)
         end
 
         -- Clip current right pair
-        M.execute(row, col, pos, nil, cursor_char)
+        M.execute(row, col, pos, nil, cursor_char, true)
     end
 end
 
 ---@param pos { first: boolean, end_row: integer, end_col: integer }
 ---@param left_pair string|nil
 ---@param right_pair string
-function M.execute(cur_row, cur_col, pos, left_pair, right_pair)
+---@param update_link boolean
+function M.execute(cur_row, cur_col, pos, left_pair, right_pair, update_link)
     vim.cmd([[norm! m']])
     local first, end_row, end_col = pos.first, pos.end_row, pos.end_col
     if first then
@@ -257,7 +298,7 @@ function M.execute(cur_row, cur_col, pos, left_pair, right_pair)
     vim.api.nvim_buf_set_text(0, end_row, end_col, end_row, end_col, { right_pair })
     -- |text) -> text)|
     vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col })
-    if link[cursor_id(end_row, end_col)] == nil then
+    if update_link and link[cursor_id(end_row, end_col)] == nil then
         link[cursor_id(end_row, end_col)] = { id = cursor_id(cur_row, cur_col), line = vim.api.nvim_get_current_line() }
     end
     if vim.fn.mode() == "i" then
