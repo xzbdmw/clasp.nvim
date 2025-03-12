@@ -101,12 +101,8 @@ If you have multiple cursors, make sure you call `wrap` in normal mode.
 ## Similar plugins
 
 - [ultimate-autopair.nvim](https://github.com/altermo/ultimate-autopair.nvim)
-    - Uses a regex heuristic combined with already
-      matched pairs to determine right pair position, while this plugin relies solely on
-      treesitter. This makes it jumps more aggressive and allows `wrap('prev')`
-      to jump from a large region to a smaller one as the possible positions
-      are known when parsing over. The downside is sometimes treesitter does
-      not have a valid parse tree so position may be wrong compared to regex solution.
+    - Uses a regex heuristic combined with already matched pairs to determine
+      right pair position, while this plugin relies on treesitter.
     - The main motivation for writting this plugin is to support multi-cursor. So
       it works on normal mode and remembers each cursor's parsing state.
 - [nvim-autopairs](https://github.com/windwp/nvim-autopairs)
