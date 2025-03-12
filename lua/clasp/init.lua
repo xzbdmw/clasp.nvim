@@ -122,9 +122,7 @@ function M.in_multi_cursor()
     return package.loaded["multicursor-nvim"] and require("multicursor-nvim").numCursors() > 1
 end
 
----@param row integer
----@param col integer
-local function clean_state(row, col)
+local function clean_state()
     if not M.in_multi_cursor() then
         M.clean()
     else
@@ -143,7 +141,7 @@ local function clean_state(row, col)
 end
 
 local function can_fallback(cursor_char)
-    for k, v in pairs(M.config.pairs) do
+    for _, v in pairs(M.config.pairs) do
         if cursor_char == v then
             return true
         end
@@ -199,7 +197,7 @@ function M.wrap(direction, filter)
         end
     end
     if head == nil or state[head] == nil then
-        clean_state(row, col)
+        clean_state()
 
         local cursor_left, cursor_char, right = surrounding_char(row + 1, col)
         if cursor_char ~= "" and M.config.pairs[cursor_left] == cursor_char and col > 0 then
@@ -257,7 +255,6 @@ function M.wrap(direction, filter)
             state[head] = { nodes = nodes, direction = direction }
         end
 
-        local left_pair, right_pair = cursor_char, expected
         local pos = next_pos(row, col, nodes, "next")
         if pos == nil then
             return
@@ -304,7 +301,7 @@ function M.execute(cur_row, cur_col, pos, left_pair, right_pair, update_link)
     if vim.fn.mode() == "i" then
         vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col + 1 })
     end
-    -- inline extmark may leave cursor in a wrong position in neovide
+    -- inline extmark may leave cursor in a wrong position
     vim.cmd("redraw")
 end
 
