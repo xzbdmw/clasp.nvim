@@ -301,8 +301,6 @@ function M.execute(cur_row, cur_col, pos, left_pair, right_pair, update_link)
     if vim.fn.mode() == "i" then
         vim.api.nvim_win_set_cursor(0, { end_row + 1, end_col + 1 })
     end
-    -- inline extmark may leave cursor in a wrong position
-    vim.cmd("redraw")
 end
 
 ---@param row integer
@@ -314,7 +312,7 @@ function M.get_nodes(row, col, filter)
     ---@cast node_ranges clasp.Nodes[]
 
     local ok = pcall(function()
-        vim.treesitter.get_parser(0, vim.bo.filetype):parse()
+        vim.treesitter.get_parser(0, vim.bo.filetype):parse(true)
     end)
     if not ok then
         return {}
