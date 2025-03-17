@@ -97,6 +97,21 @@ return {
 ## Limitations
 
 If you have multiple cursors, make sure you call `wrap` in normal mode.
+It is suggested to define mappings like this,
+so you can keep pressing `<c-l>` the same in insert mode:
+```lua
+vim.keymap.set({ "n", "i" }, "<c-l>", function()
+    if
+        vim.fn.mode() == "i"
+        and package.loaded["multicursor-nvim"]
+        and require("multicursor-nvim").numCursors() > 1
+    then
+        vim.cmd("stopinsert")
+    else
+        require("clasp").wrap("next")
+    end
+end)
+```
 
 ## Similar plugins
 
