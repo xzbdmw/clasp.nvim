@@ -311,12 +311,23 @@ function M.get_nodes(row, col, filter)
     local node_ranges = {}
     ---@cast node_ranges clasp.Nodes[]
 
-    local ok = pcall(function()
-        vim.treesitter.get_parser(0, vim.bo.filetype):parse(true)
-    end)
-    if not ok then
+    local ok, parser = pcall(vim.treesitter.get_parser, 0, vim.bo.filetype)
+    if (not ok) or (parser == nil) then
         return {}
     end
+    ok = pcall(function()
+        local top_line, bottom_line = vim.fn.line("w0"), vim.fn.line("w$")
+        parser:parse({ top_line, bottom_line + 1 })
+    end)
+    if not ok then
+        ok = pcall(function()
+            parser:parse(true)
+        end)
+        if not ok then
+            return {}
+        end
+    end
+
     local cursor_node = vim.treesitter.get_node({ ignore_injections = false })
     if not cursor_node then
         return {}
