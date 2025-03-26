@@ -328,7 +328,12 @@ function M.get_nodes(row, col, filter)
         end
     end
 
-    local cursor_node = vim.treesitter.get_node({ ignore_injections = false })
+    local cnt = #vim.api.nvim_buf_get_text(0, row, 0, row, -1, {})[1]
+    while col < cnt and vim.api.nvim_buf_get_text(0, row, col, row, col + 1, {})[1] == " " do
+        col = col + 1
+    end
+
+    local cursor_node = vim.treesitter.get_node({ ignore_injections = false, pos = { row, col } })
     if not cursor_node then
         return {}
     end
