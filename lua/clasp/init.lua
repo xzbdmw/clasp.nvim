@@ -338,7 +338,7 @@ function M.get_nodes(row, col, filter)
     row, col = cursor_node:range()
     while node do
         local start_row, start_col, end_row, end_col = node:range()
-        if start_row == row then
+        if start_row == row and end_row < vim.api.nvim_buf_line_count(0) then
             local n = { start_row = start_row, start_col = start_col, end_row = end_row, end_col = end_col }
             if end_row == row then
                 n.end_col = n.end_col + 1

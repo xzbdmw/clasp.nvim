@@ -99,6 +99,7 @@ return {
 If you have multiple cursors, make sure you call `wrap` in normal mode.
 It is suggested to define mappings like this,
 so you can keep pressing `<c-l>` the same in insert mode:
+
 ```lua
 vim.keymap.set({ "n", "i" }, "<c-l>", function()
     if
